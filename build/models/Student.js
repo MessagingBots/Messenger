@@ -20,8 +20,10 @@ var StudentSchema = new _mongoose2.default.Schema({
   canvas: {},
   fb: {
     id: String,
-    token: String,
-    name: String,
+    senderID: String,
+    accessToken: String,
+    firstName: String,
+    lastName: String,
     email: String
   },
   slack: {}

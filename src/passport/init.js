@@ -2,7 +2,6 @@ let facebook = require('./facebook');
 let Student = require('../models/Student');
 let LocalStrategy = require('passport-local').Strategy;
 
-
 module.exports = function(passport) {
 	// Passport needs to be able to serialize and deserialize users to support persistent login sessions
     passport.serializeUser(function(student, done) {

@@ -1,12 +1,16 @@
+import crypto from 'crypto';
 import config from '../config/default';
-import request from 'request';
+
 import {
   callSendAPI, sendAccountLinking, sendTextMessage,
-  sendFileMessage, sendButtonMessage, sendQuickReply, sendTypingOn
+  sendFileMessage, sendButtonMessage, sendQuickReply, sendTypingOn,
+  sendReadReceipt, sendTypingOff, sendCourses,
 } from './sendUtils';
 
+const Student = require('../models/Student');
 const API_URL = (process.env.NODE_ENV === 'dev') ? config.dev.API_URL : config.prod.API_URL;
 const SERVER_URL = (process.env.NODE_ENV === 'dev') ? config.dev.SERVER_URL : config.prod.SERVER_URL;
+const APP_SECRET = config.fb.appSecret;
 
 /*
  * Verify that the callback came from Facebook. Using the App Secret from
@@ -17,23 +21,23 @@ const SERVER_URL = (process.env.NODE_ENV === 'dev') ? config.dev.SERVER_URL : co
  *
  */
 function verifyRequestSignature(req, res, buf) {
-  var signature = req.headers["x-hub-signature"];
+  const signature = req.headers['x-hub-signature'];
 
   if (!signature) {
     // For testing, let's log an error. In production, you should throw an
     // error.
-    console.error("Couldn't validate the signature.");
+    console.error('Couldn\'t validate the signature.');
   } else {
-    var elements = signature.split('=');
-    var method = elements[0];
-    var signatureHash = elements[1];
+    const elements = signature.split('=');
+    const method = elements[0];
+    const signatureHash = elements[1];
 
-    var expectedHash = crypto.createHmac('sha1', APP_SECRET)
+    const expectedHash = crypto.createHmac('sha1', APP_SECRET)
                         .update(buf)
                         .digest('hex');
 
-    if (signatureHash != expectedHash) {
-      throw new Error("Couldn't validate the request signature.");
+    if (signatureHash !== expectedHash) {
+      throw new Error('Couldn\'t validate the request signature.');
     }
   }
 }
@@ -47,24 +51,24 @@ function verifyRequestSignature(req, res, buf) {
  *
  */
 function receivedAuthentication(event) {
-  var senderID = event.sender.id;
-  var recipientID = event.recipient.id;
-  var timeOfAuth = event.timestamp;
+  const senderID = event.sender.id;
+  const recipientID = event.recipient.id;
+  const timeOfAuth = event.timestamp;
 
   // The 'ref' field is set in the 'Send to Messenger' plugin, in the 'data-ref'
   // The developer can set this to an arbitrary value to associate the
   // authentication callback with the 'Send to Messenger' click event. This is
   // a way to do account linking when the user clicks the 'Send to Messenger'
   // plugin.
-  var passThroughParam = event.optin.ref;
+  const passThroughParam = event.optin.ref;
 
-  console.log("Received authentication for user %d and page %d with pass " +
-    "through param '%s' at %d", senderID, recipientID, passThroughParam,
+  console.log('Received authentication for user %d and page %d with pass ' +
+    'through param %s at %d', senderID, recipientID, passThroughParam,
     timeOfAuth);
 
   // When an authentication is received, we'll send a message back to the sender
   // to let them know it was successful.
-  sendTextMessage(senderID, "Authentication successful");
+  sendTextMessage(senderID, 'Authentication successful');
 }
 
 /*
@@ -82,24 +86,24 @@ function receivedAuthentication(event) {
  *
  */
 function receivedMessage(event) {
-  var senderID = event.sender.id;
-  var recipientID = event.recipient.id;
-  var timeOfMessage = event.timestamp;
-  var message = event.message;
+  const senderID = event.sender.id;
+  const recipientID = event.recipient.id;
+  const timeOfMessage = event.timestamp;
+  const message = event.message;
 
   console.log("Received message for user %d and page %d at %d with message:",
     senderID, recipientID, timeOfMessage);
   console.log(JSON.stringify(message));
 
-  var isEcho = message.is_echo;
-  var messageId = message.mid;
-  var appId = message.app_id;
-  var metadata = message.metadata;
+  const isEcho = message.is_echo;
+  const messageId = message.mid;
+  const appId = message.app_id;
+  const metadata = message.metadata;
 
   // You may get a text or attachment but not both
-  var messageText = message.text;
-  var messageAttachments = message.attachments;
-  var quickReply = message.quick_reply;
+  const messageText = message.text;
+  const messageAttachments = message.attachments;
+  const quickReply = message.quick_reply;
 
   if (isEcho) {
     // Just logging message echoes to console
@@ -107,7 +111,7 @@ function receivedMessage(event) {
       messageId, appId, metadata);
     return;
   } else if (quickReply) {
-    var quickReplyPayload = quickReply.payload;
+    const quickReplyPayload = quickReply.payload;
     console.log("Quick reply for message %s with payload %s",
       messageId, quickReplyPayload);
 
@@ -116,25 +120,12 @@ function receivedMessage(event) {
   }
 
   if (messageText) {
-
     // If we receive a text message, check to see if it matches any special
     // keywords and send back the corresponding example. Otherwise, just echo
     // the text we received.
     switch (messageText) {
-      case 'image':
-        sendImageMessage(senderID);
-        break;
-
-      case 'gif':
-        sendGifMessage(senderID);
-        break;
-
-      case 'audio':
-        sendAudioMessage(senderID);
-        break;
-
-      case 'video':
-        sendVideoMessage(senderID);
+      case 'courses':
+        sendCourses(senderID);
         break;
 
       case 'file':
@@ -143,14 +134,6 @@ function receivedMessage(event) {
 
       case 'button':
         sendButtonMessage(senderID);
-        break;
-
-      case 'generic':
-        sendGenericMessage(senderID);
-        break;
-
-      case 'receipt':
-        sendReceiptMessage(senderID);
         break;
 
       case 'quick reply':
@@ -177,7 +160,7 @@ function receivedMessage(event) {
         sendTextMessage(senderID, messageText);
     }
   } else if (messageAttachments) {
-    sendTextMessage(senderID, "Message with attachment received");
+    sendTextMessage(senderID, 'Message with attachment received');
   }
 }
 
@@ -190,21 +173,21 @@ function receivedMessage(event) {
  *
  */
 function receivedDeliveryConfirmation(event) {
-  var senderID = event.sender.id;
-  var recipientID = event.recipient.id;
-  var delivery = event.delivery;
-  var messageIDs = delivery.mids;
-  var watermark = delivery.watermark;
-  var sequenceNumber = delivery.seq;
+  const senderID = event.sender.id;
+  const recipientID = event.recipient.id;
+  const delivery = event.delivery;
+  const messageIDs = delivery.mids;
+  const watermark = delivery.watermark;
+  const sequenceNumber = delivery.seq;
 
   if (messageIDs) {
-    messageIDs.forEach(function(messageID) {
-      console.log("Received delivery confirmation for message ID: %s",
+    messageIDs.forEach(function (messageID) {
+      console.log('Received delivery confirmation for message ID: %s',
         messageID);
     });
   }
 
-  console.log("All message before %d were delivered.", watermark);
+  console.log('All message before %d were delivered.', watermark);
 }
 
 
@@ -269,56 +252,56 @@ function receivedAccountLink(event) {
     "and auth code %s ", senderID, status, authCode);
 }
 
-module.exports = (req, res) => {
-  if (req.method === 'GET') {
-    if (req.query['hub.mode'] === 'subscribe' &&
-        req.query['hub.verify_token'] === config.verifyToken) {
-      console.log("Validating webhook");
-      res.status(200).send(req.query['hub.challenge']);
-    } else {
-      console.log('your token: ');
-      console.log(config.verifyToken);
-      console.log('token fb sent');
-      console.log(req.query['hub.verify_token']);
-      console.error("Failed validation. Make sure the validation tokens match.");
-      res.sendStatus(403);
-    }
-  } else if (req.method === 'POST') {
-    let data = req.body;
-
-    // Make sure this is a page subscription
-    if (data.object == 'page') {
-      // Iterate over each entry
-      // There may be multiple if batched
-      data.entry.forEach(function(pageEntry) {
-        var pageID = pageEntry.id;
-        var timeOfEvent = pageEntry.time;
-
-        // Iterate over each messaging event
-        pageEntry.messaging.forEach(function(messagingEvent) {
-          if (messagingEvent.optin) {
-            receivedAuthentication(messagingEvent);
-          } else if (messagingEvent.message) {
-            receivedMessage(messagingEvent);
-          } else if (messagingEvent.delivery) {
-            receivedDeliveryConfirmation(messagingEvent);
-          } else if (messagingEvent.postback) {
-            receivedPostback(messagingEvent);
-          } else if (messagingEvent.read) {
-            receivedMessageRead(messagingEvent);
-          } else if (messagingEvent.account_linking) {
-            receivedAccountLink(messagingEvent);
-          } else {
-            console.log("Webhook received unknown messagingEvent: ", messagingEvent);
-          }
-        });
-      });
-
-      // Assume all went well.
-      //
-      // You must send back a 200, within 20 seconds, to let us know you've
-      // successfully received the callback. Otherwise, the request will time out.
-      res.sendStatus(200);
-    }
+exports.get = (req, res) => {
+  if (req.query['hub.mode'] === 'subscribe' &&
+      req.query['hub.verify_token'] === config.verifyToken) {
+    console.log('Validating webhook');
+    res.status(200).send(req.query['hub.challenge']);
+  } else {
+    console.log('your token: ');
+    console.log(config.verifyToken);
+    console.log('token fb sent');
+    console.log(req.query['hub.verify_token']);
+    console.error('Failed validation. Make sure the validation tokens match.');
+    res.sendStatus(403);
   }
-}
+};
+
+exports.post = (req, res) => {
+  const data = req.body;
+
+  // Make sure this is a page subscription
+  if (data.object == 'page') {
+    // Iterate over each entry
+    // There may be multiple if batched
+    data.entry.forEach(function(pageEntry) {
+      var pageID = pageEntry.id;
+      var timeOfEvent = pageEntry.time;
+
+      // Iterate over each messaging event
+      pageEntry.messaging.forEach(function(messagingEvent) {
+        if (messagingEvent.optin) {
+          receivedAuthentication(messagingEvent);
+        } else if (messagingEvent.message) {
+          receivedMessage(messagingEvent);
+        } else if (messagingEvent.delivery) {
+          receivedDeliveryConfirmation(messagingEvent);
+        } else if (messagingEvent.postback) {
+          receivedPostback(messagingEvent);
+        } else if (messagingEvent.read) {
+          receivedMessageRead(messagingEvent);
+        } else if (messagingEvent.account_linking) {
+          receivedAccountLink(messagingEvent);
+        } else {
+          console.log("Webhook received unknown messagingEvent: ", messagingEvent);
+        }
+      });
+    });
+
+    // Assume all went well.
+    //
+    // You must send back a 200, within 20 seconds, to let us know you've
+    // successfully received the callback. Otherwise, the request will time out.
+    res.sendStatus(200);
+  }
+};

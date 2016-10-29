@@ -12,13 +12,15 @@ let StudentSchema = new mongoose.Schema({
   },
   fb: {
     id: String,
-    token: String,
-    name: String,
-    email: String
+    senderID: String,
+    accessToken: String,
+    firstName: String,
+    lastName: String,
+    email: String,
   },
   slack: {
 
-  }
+  },
 });
 
 // generating a hash
